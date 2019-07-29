@@ -1,0 +1,4 @@
+Sitemap: https://shriv.github.io/nikola-test-blog/sitemapindex.xml
+
+User-Agent: *
+Host: shriv.github.io
