@@ -1,5 +1,387 @@
 <?xml version="1.0" encoding="utf-8"?>
-<?xml-stylesheet type="text/xsl" href="assets/xml/rss.xsl" media="all"?><rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>My Nikola Site</title><link>https://shriv.github.io/nikola-test-blog/</link><description>This is a demo site for Nikola.</description><atom:link href="https://shriv.github.io/nikola-test-blog/rss.xml" rel="self" type="application/rss+xml"></atom:link><language>en</language><copyright>Contents © 2019 &lt;a href="mailto:n.tesla@example.com"&gt;Shriv&lt;/a&gt; </copyright><lastBuildDate>Mon, 29 Jul 2019 06:07:33 GMT</lastBuildDate><generator>Nikola (getnikola.com)</generator><docs>http://blogs.law.harvard.edu/tech/rss</docs><item><title>Geospatial analyses with R</title><link>https://shriv.github.io/nikola-test-blog/posts/geospatial-analyses-with-r/</link><dc:creator>Shriv</dc:creator><description>&lt;div&gt;&lt;h3&gt;Introduction&lt;/h3&gt;
+<?xml-stylesheet type="text/xsl" href="assets/xml/rss.xsl" media="all"?><rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>My Nikola Site</title><link>https://shriv.github.io/nikola-test-blog/</link><description>This is a demo site for Nikola.</description><atom:link href="https://shriv.github.io/nikola-test-blog/rss.xml" rel="self" type="application/rss+xml"></atom:link><language>en</language><copyright>Contents © 2019 &lt;a href="mailto:n.tesla@example.com"&gt;Shriv&lt;/a&gt; </copyright><lastBuildDate>Tue, 30 Jul 2019 03:22:32 GMT</lastBuildDate><generator>Nikola (getnikola.com)</generator><docs>http://blogs.law.harvard.edu/tech/rss</docs><item><title>A test notebook</title><link>https://shriv.github.io/nikola-test-blog/posts/a-test-notebook/</link><dc:creator>Shriv</dc:creator><description>&lt;div&gt;&lt;div class="cell border-box-sizing text_cell rendered"&gt;&lt;div class="prompt input_prompt"&gt;
+&lt;/div&gt;&lt;div class="inner_cell"&gt;
+&lt;div class="text_cell_render border-box-sizing rendered_html"&gt;
+&lt;h2 id="Introduction"&gt;Introduction&lt;a class="anchor-link" href="https://shriv.github.io/nikola-test-blog/posts/a-test-notebook/#Introduction"&gt;¶&lt;/a&gt;&lt;/h2&gt;&lt;p&gt;OpenStreetMap (OSM) has a wealth of spatial data that is easily accessible via the Overpass API. This notebook explores how OSM data can be leveraged with other rich sources of spatial data. Since I'm a kiwi who's interested in public sector work, I'm using the spatial data available from StatsNZ. Also, I believe that the internet needs more analysis done with non-USA data!&lt;/p&gt;
+&lt;p&gt;The particular focus this notebook is how external sources of data can be combined with local government spatial data. In brief, the notebook covers:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Getting OSM data via Overpass&lt;/li&gt;
+&lt;li&gt;Calculating way polygon centroids as POI&lt;/li&gt;
+&lt;li&gt;Plotting POIs on Folium map&lt;/li&gt;
+&lt;li&gt;Loading administrative boundaries from Stats NZ&lt;/li&gt;
+&lt;li&gt;Aggregating data within an administrative boundary&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The motivation for this notebook is to obtain richer features for spatial flow modelling. I started out following the &lt;a href="https://rpubs.com/adam_dennett/376877"&gt;excellent tutorial by Adam Dennett for modelling commuting patterns&lt;/a&gt;. I &lt;a href="https://github.com/shriv/wellington-commutes"&gt;hacked out an equivalent in R for Wellington City commuters&lt;/a&gt;. But, by the end of the notebook, I realised that: (1) I needed much more exposure to the spatial data used by Stats NZ, and (2) the model was terrible; embarrassingly so - with 0% explained variance. Of course, the reason is that a garbage feature gives garbage predictions. In my case, the destination 'attractiveness' feature was beyond hopeless - the data actually had the opposite to expected dependence! I realised that I could add better features to the model if I only knew how to join the StatsNZ spatial data with other sources. This notebook works through an end to end generation of destination attractiveness features with OSM data: (1) number of commercial/ office buildings aggregated within the StatsNZ Statistical Area Unit (SA), and (2) land area covered by residential buildings within an SA.&lt;/p&gt;
+&lt;p&gt;The key idea of these new features is to better represent where offices are located vs. residential areas. I want to be able to combine these to create a single feature that is correlated to workplace.&lt;/p&gt;
+
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="cell border-box-sizing code_cell rendered"&gt;
+&lt;div class="input"&gt;
+&lt;div class="prompt input_prompt"&gt;In [2]:&lt;/div&gt;
+&lt;div class="inner_cell"&gt;
+    &lt;div class="input_area"&gt;
+&lt;div class=" highlight hl-ipython3"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="c1"&gt;# Import some packages&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;warnings&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;pandas&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;pd&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;matplotlib.pyplot&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;plt&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;seaborn&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;sns&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;folium&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;geopandas&lt;/span&gt; 
+&lt;span class="kn"&gt;from&lt;/span&gt; &lt;span class="nn"&gt;shapely.geometry&lt;/span&gt; &lt;span class="k"&gt;import&lt;/span&gt; &lt;span class="n"&gt;Point&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;Polygon&lt;/span&gt;
+
+&lt;span class="c1"&gt;# User modules&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;utils.data_processing&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;dp&lt;/span&gt;
+
+&lt;span class="c1"&gt;# Some configs&lt;/span&gt;
+&lt;span class="n"&gt;warnings&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;filterwarnings&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'ignore'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;pd&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;set_option&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'display.max_colwidth'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="c1"&gt;#%matplotlib inline&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;/div&gt;
+&lt;div class="cell border-box-sizing text_cell rendered"&gt;&lt;div class="prompt input_prompt"&gt;
+&lt;/div&gt;&lt;div class="inner_cell"&gt;
+&lt;div class="text_cell_render border-box-sizing rendered_html"&gt;
+&lt;h2 id="Get-OSM-data"&gt;Get OSM data&lt;a class="anchor-link" href="https://shriv.github.io/nikola-test-blog/posts/a-test-notebook/#Get-OSM-data"&gt;¶&lt;/a&gt;&lt;/h2&gt;&lt;p&gt;OSM data is amazingly rich. It has two key components: (1) spatial objects,  and (2) a taxonomy for tagging the spatial objects. The root spatial primitive is a &lt;em&gt;node&lt;/em&gt;. A collection of nodes makes up a &lt;em&gt;way&lt;/em&gt;. Ways can be polygons or lines. Both nodes and ways &lt;a href="https://wiki.openstreetmap.org/wiki/Tags"&gt;can be tagged&lt;/a&gt; with the extensive taxonomy specified by OSM.&lt;/p&gt;
+&lt;p&gt;In &lt;a href="https://github.com/shriv/fuel-stations"&gt;a previous analysis&lt;/a&gt;, I focused on getting and analysing nodes from OSM. At the time, I believed that way data was not useful since it was a polygon and thus too complex to do anything with. I'm a changed woman now - way data is the &lt;em&gt;way forward&lt;/em&gt;!&lt;/p&gt;
+&lt;p&gt;Puns aside, the reason any polygon (way, spatial boundaries etc.) data is difficult to harness is because it actually requires understanding of spatial data manipulation - from theoretical aspects of projections and datums to reading in a diverse array spatial data formats. The problem gets more complicated when one wants to join  spatial datasets from different sources! Geo-munging is not trivial and sometimes the specificity of the datasets means that the entrypoint for a newbie is rather daunting! There are plenty of resources on the interwebs on geo-munging for sure but sadly none that met my needs. Hence, this little notebook. It brings together OSM data and spatial boundary datasets to derive interesting spatial features.&lt;/p&gt;
+&lt;p&gt;There are 3 key steps to get data from OSM:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Generate the boundary box for the query&lt;/li&gt;
+&lt;li&gt;Write the query&lt;/li&gt;
+&lt;li&gt;Request data from OSM&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The final step is to transfrom the data into one that's suitable for the particular application. I've requested the data as JSON but I'm managing it with pandas / geopandas for analysis.&lt;/p&gt;
+
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="cell border-box-sizing text_cell rendered"&gt;&lt;div class="prompt input_prompt"&gt;
+&lt;/div&gt;&lt;div class="inner_cell"&gt;
+&lt;div class="text_cell_render border-box-sizing rendered_html"&gt;
+&lt;h3 id="Define-bounding-box"&gt;Define bounding box&lt;a class="anchor-link" href="https://shriv.github.io/nikola-test-blog/posts/a-test-notebook/#Define-bounding-box"&gt;¶&lt;/a&gt;&lt;/h3&gt;&lt;p&gt;I've &lt;a href="http://htmlpreview.github.io/?https://github.com/shriv/fuel-stations/blob/master/html/Fuel%20Stations%20Analysis.html#Set-bounding-box"&gt;written at some length about bounding boxes&lt;/a&gt; in my previous analysis with node data from OSM. So, here I'll just say that the bounding box defines a rectangular region that we're interested in with lattitude and longitude. The visual tool &lt;a href="http://boundingbox.klokantech.com/"&gt;here&lt;/a&gt; can be used to get the vertices of the box.&lt;/p&gt;
+
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="cell border-box-sizing code_cell rendered"&gt;
+&lt;div class="input"&gt;
+&lt;div class="prompt input_prompt"&gt;In [3]:&lt;/div&gt;
+&lt;div class="inner_cell"&gt;
+    &lt;div class="input_area"&gt;
+&lt;div class=" highlight hl-ipython3"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="c1"&gt;# Define bounding box (W, S, E, N) for the area of Wellington we're interested in&lt;/span&gt;
+&lt;span class="n"&gt;general_bbox&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mf"&gt;174.5813&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mf"&gt;41.4552&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="mf"&gt;175.0722&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="o"&gt;-&lt;/span&gt;&lt;span class="mf"&gt;41.1527&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+
+&lt;span class="c1"&gt;# Separate out the bounding box list into 4 vertices. &lt;/span&gt;
+&lt;span class="n"&gt;south&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;general_bbox&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="n"&gt;west&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;general_bbox&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="n"&gt;north&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;general_bbox&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;3&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="n"&gt;east&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;general_bbox&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+
+&lt;span class="c1"&gt;# Set OSM bounding box&lt;/span&gt;
+&lt;span class="n"&gt;osm_bbox&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;south&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;west&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;north&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;east&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;/div&gt;
+&lt;div class="cell border-box-sizing text_cell rendered"&gt;&lt;div class="prompt input_prompt"&gt;
+&lt;/div&gt;&lt;div class="inner_cell"&gt;
+&lt;div class="text_cell_render border-box-sizing rendered_html"&gt;
+&lt;h3 id="Generate-Overpass-query"&gt;Generate Overpass query&lt;a class="anchor-link" href="https://shriv.github.io/nikola-test-blog/posts/a-test-notebook/#Generate-Overpass-query"&gt;¶&lt;/a&gt;&lt;/h3&gt;&lt;p&gt;Overpass is the API through which we access OSM data. I've cannibalised my Overpass query from various sources including &lt;a href="https://github.com/gboeing/urban-data-science/blob/master/20-Accessibility-Walkability/pandana-accessibility-demo-full.ipynb"&gt;Geoff Boening's spatial analysis course notes&lt;/a&gt;. The &lt;a href="http://overpass-turbo.eu/"&gt;Overpass Turbo site&lt;/a&gt; can be used to test out the queries - you can inspect the data visually and through the specified output format.&lt;/p&gt;
+&lt;p&gt;Since I'm interested in commerical buildings, I've generated a simple query for the Wellington City region that gets all &lt;em&gt;ways&lt;/em&gt; that are tagged as commercial type buildings. The specific tags associated with these buildings are given in the code below.&lt;/p&gt;
+&lt;p&gt;The query structure for my example is pretty simple. The following things need to be specified:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;output format &lt;/li&gt;
+&lt;li&gt;timeout in seconds&lt;/li&gt;
+&lt;li&gt;the particular spatial entities we want to retrieve &lt;ul&gt;
+&lt;li&gt;done by filtering on tags&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;the bounding box for the data&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="cell border-box-sizing code_cell rendered"&gt;
+&lt;div class="input"&gt;
+&lt;div class="prompt input_prompt"&gt;In [4]:&lt;/div&gt;
+&lt;div class="inner_cell"&gt;
+    &lt;div class="input_area"&gt;
+&lt;div class=" highlight hl-ipython3"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="c1"&gt;# What types of entitities do we want to get? &lt;/span&gt;
+&lt;span class="n"&gt;tags&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s2"&gt;"commercial"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s2"&gt;"office"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s2"&gt;"retail"&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s2"&gt;"industrial"&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
+&lt;span class="n"&gt;objects&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="s1"&gt;'way'&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="c1"&gt;# like way, node, relation&lt;/span&gt;
+&lt;span class="n"&gt;entity&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;'building'&lt;/span&gt;
+&lt;span class="n"&gt;osm_objects&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;entity&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;tags&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="n"&gt;objects&lt;/span&gt;
+
+&lt;span class="c1"&gt;# Generate the query string&lt;/span&gt;
+&lt;span class="n"&gt;compactOverpassQLstring&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;dp&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;generate_overpass_query&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;tags&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;objects&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;osm_bbox&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;entity&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;compactOverpassQLstring&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;div class="output_wrapper"&gt;
+&lt;div class="output"&gt;
+
+
+&lt;div class="output_area"&gt;
+
+    &lt;div class="prompt"&gt;&lt;/div&gt;
+
+
+&lt;div class="output_subarea output_stream output_stdout output_text"&gt;
+&lt;pre&gt;[out:json][timeout:60];(way["building" ~ "commercial"](-41.4552,174.5813,-41.1527,175.0722);way["building" ~ "office"](-41.4552,174.5813,-41.1527,175.0722);way["building" ~ "retail"](-41.4552,174.5813,-41.1527,175.0722);way["building" ~ "industrial"](-41.4552,174.5813,-41.1527,175.0722););out body;&amp;gt;;out skel qt;
+&lt;/pre&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;/div&gt;
+&lt;div class="cell border-box-sizing text_cell rendered"&gt;&lt;div class="prompt input_prompt"&gt;
+&lt;/div&gt;&lt;div class="inner_cell"&gt;
+&lt;div class="text_cell_render border-box-sizing rendered_html"&gt;
+&lt;h3 id="Get-data"&gt;Get data&lt;a class="anchor-link" href="https://shriv.github.io/nikola-test-blog/posts/a-test-notebook/#Get-data"&gt;¶&lt;/a&gt;&lt;/h3&gt;&lt;p&gt;The retreived JSON data can be transformed into a Pandas dataframe. At the moment, I have a minor problem with saving the way data as CSV - some of the node lists were getting truncated. This means that every re-run of the code will involve re-querying. Not great - but manageable at the moment since I'm not retreiving much data.&lt;/p&gt;
+
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="cell border-box-sizing code_cell rendered"&gt;
+&lt;div class="input"&gt;
+&lt;div class="prompt input_prompt"&gt;In [5]:&lt;/div&gt;
+&lt;div class="inner_cell"&gt;
+    &lt;div class="input_area"&gt;
+&lt;div class=" highlight hl-ipython3"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="c1"&gt;# Get Data&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;importlib&lt;/span&gt;
+&lt;span class="n"&gt;importlib&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;reload&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;dp&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;osmdf&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;dp&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;get_osm_data&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;compactOverpassQLstring&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;osm_bbox&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;osm_objects&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;osmdf&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;head&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;div class="output_wrapper"&gt;
+&lt;div class="output"&gt;
+
+
+&lt;div class="output_area"&gt;
+
+    &lt;div class="prompt output_prompt"&gt;Out[5]:&lt;/div&gt;
+
+
+
+&lt;div class="output_html rendered_html output_subarea output_execute_result"&gt;
+&lt;div&gt;
+&lt;style scoped&gt;
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+&lt;/style&gt;
+&lt;table border="1" class="dataframe"&gt;
+  &lt;thead&gt;
+    &lt;tr style="text-align: right;"&gt;
+      &lt;th&gt;&lt;/th&gt;
+      &lt;th&gt;LINZ2OSM:dataset&lt;/th&gt;
+      &lt;th&gt;LINZ2OSM:layer&lt;/th&gt;
+      &lt;th&gt;LINZ2OSM:source_version&lt;/th&gt;
+      &lt;th&gt;addr:city&lt;/th&gt;
+      &lt;th&gt;addr:country&lt;/th&gt;
+      &lt;th&gt;addr:housename&lt;/th&gt;
+      &lt;th&gt;addr:housenumber&lt;/th&gt;
+      &lt;th&gt;addr:postcode&lt;/th&gt;
+      &lt;th&gt;addr:street&lt;/th&gt;
+      &lt;th&gt;alt_name&lt;/th&gt;
+      &lt;th&gt;...&lt;/th&gt;
+      &lt;th&gt;roof:levels&lt;/th&gt;
+      &lt;th&gt;shop&lt;/th&gt;
+      &lt;th&gt;smoking&lt;/th&gt;
+      &lt;th&gt;source&lt;/th&gt;
+      &lt;th&gt;substation&lt;/th&gt;
+      &lt;th&gt;type&lt;/th&gt;
+      &lt;th&gt;voltage&lt;/th&gt;
+      &lt;th&gt;website&lt;/th&gt;
+      &lt;th&gt;wikidata&lt;/th&gt;
+      &lt;th&gt;year_of_construction&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;th&gt;0&lt;/th&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;Wellington&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;100&lt;/td&gt;
+      &lt;td&gt;6011.0&lt;/td&gt;
+      &lt;td&gt;Willis Street&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;...&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;way&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;Q10323215&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;1&lt;/th&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;...&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;way&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;2&lt;/th&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;Wellington&lt;/td&gt;
+      &lt;td&gt;NZ&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;150&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;Willis Street&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;...&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;way&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;3&lt;/th&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;...&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;way&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;th&gt;4&lt;/th&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;...&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;way&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+      &lt;td&gt;NaN&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;5 rows × 47 columns&lt;/p&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;/div&gt;
+
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;/div&gt;
+&lt;div class="cell border-box-sizing text_cell rendered"&gt;&lt;div class="prompt input_prompt"&gt;
+&lt;/div&gt;&lt;div class="inner_cell"&gt;
+&lt;div class="text_cell_render border-box-sizing rendered_html"&gt;
+&lt;h2 id="Calculate-polygon-centroids"&gt;Calculate polygon centroids&lt;a class="anchor-link" href="https://shriv.github.io/nikola-test-blog/posts/a-test-notebook/#Calculate-polygon-centroids"&gt;¶&lt;/a&gt;&lt;/h2&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;div class="cell border-box-sizing code_cell rendered"&gt;
+&lt;div class="input"&gt;
+&lt;div class="prompt input_prompt"&gt;In [7]:&lt;/div&gt;
+&lt;div class="inner_cell"&gt;
+    &lt;div class="input_area"&gt;
+&lt;div class=" highlight hl-ipython3"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="n"&gt;importlib&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;reload&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;dp&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;osmdf_clean&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;dp&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;extend_ways_to_node_view&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;osmdf&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="n"&gt;osmdf_centroids&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;osmdf_clean&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;groupby&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'way_id'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;agg&lt;/span&gt;&lt;span class="p"&gt;({&lt;/span&gt;&lt;span class="s1"&gt;'lat'&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;'mean'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'lon'&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="s1"&gt;'mean'&lt;/span&gt; &lt;span class="p"&gt;})&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;reset_index&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
+&lt;/pre&gt;&lt;/div&gt;
+
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;/div&gt;&lt;/div&gt;</description><guid>https://shriv.github.io/nikola-test-blog/posts/a-test-notebook/</guid><pubDate>Tue, 30 Jul 2019 03:07:37 GMT</pubDate></item><item><title>Geospatial analyses with R</title><link>https://shriv.github.io/nikola-test-blog/posts/geospatial-analyses-with-r/</link><dc:creator>Shriv</dc:creator><description>&lt;div&gt;&lt;h3&gt;Introduction&lt;/h3&gt;
 &lt;p&gt;The battle of R vs. Python for data science is a constantly raging one for practitioners. Many choose their side and stick to it vehemently but others, like me, flit from one side to another using the 'Whatever is best for problem at hand' excuse. I say 'excuse' because sometimes it feels like I'm simply biding my time for a clear winner to emerge. At other times, 'excuse' is the wrong word because I do truly feel like each has their strengths and cutting-edge tools and packages are not developed simultaneously in both ecosystems.&lt;/p&gt;
 &lt;p&gt;My first port of call is usually Python, even though I think dplyr (and the tidyverse) is far better than pandas. Python is an easy start because: (1) the syntax is easy, (2) verbose loops for lazy and quick coding aren't poorly performant (unlike R!) and, (3) you don't have to remember too many onliners / idioms. Reason (3) is touted as a major scoring point for R afficianados but when data science work spans across many domains, the suite of necessary packages (and idioms) grows substantially - a real travail for those of us with poor memory.&lt;/p&gt;
 &lt;p&gt;True to my preference my previous forays into analysing transport, specifically walking, have used the Python suite of geospatial and analysis packages e.g. geopandas, osmnx, pandana, pandas, numpy, seaborn and pystan. However, in less than a week, I'll be transitioning to a new employer whose data science will be driven by R. This imminent move has prompted a self-learning spike culminating in this literature review of R packages that support spatial analyses (particularly pertaining to transport).&lt;/p&gt;

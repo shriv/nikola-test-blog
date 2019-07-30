@@ -19,7 +19,7 @@
  </url>
  <url>
   <loc>https://shriv.github.io/nikola-test-blog/archive.html</loc>
-  <lastmod>2019-07-29T06:07:00Z</lastmod>
+  <lastmod>2019-07-30T03:22:00Z</lastmod>
  </url>
  <url>
   <loc>https://shriv.github.io/nikola-test-blog/authors/</loc>
@@ -75,7 +75,7 @@
  </url>
  <url>
   <loc>https://shriv.github.io/nikola-test-blog/listings/hello.py.html</loc>
-  <lastmod>2019-07-29T06:07:00Z</lastmod>
+  <lastmod>2019-07-30T03:16:00Z</lastmod>
  </url>
  <url>
   <loc>https://shriv.github.io/nikola-test-blog/pages/about-nikola/</loc>
@@ -132,6 +132,10 @@
  <url>
   <loc>https://shriv.github.io/nikola-test-blog/pages/theming/</loc>
   <lastmod>2019-07-29T06:07:00Z</lastmod>
+ </url>
+ <url>
+  <loc>https://shriv.github.io/nikola-test-blog/posts/a-test-notebook/</loc>
+  <lastmod>2019-07-30T03:22:00Z</lastmod>
  </url>
  <url>
   <loc>https://shriv.github.io/nikola-test-blog/posts/geospatial-analyses-with-r/</loc>
